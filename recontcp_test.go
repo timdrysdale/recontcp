@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
+	"io/ioutil"
 	"math/big"
 	"net"
 	"net/http"
@@ -64,9 +65,10 @@ func TestTCPEcho(t *testing.T) {
 	hostport := net.JoinHostPort(u.Hostname(), u.Port())
 	fmt.Println(hostport)
 	closed := make(chan struct{})
-	go r.Reconnect(closed, hostport)
+	route := "/foo"
+	go r.Reconnect(closed, hostport, route)
 	fmt.Println("started r.Reconnect")
-	payload := []byte("Hello")
+	payload := []byte("Hello\n")
 	r.Out <- TcpMessage{Data: payload, N: len(payload)}
 	fmt.Printf("sent message, awaiting reply\n")
 	reply := <-r.In
@@ -98,12 +100,12 @@ func TestRetryTiming(t *testing.T) {
 	}))
 	defer s.Close()
 
-	// Convert http://127.0.0.1 to ws://127.0.0.
-	url := "ws" + strings.TrimPrefix(s.URL, "http")
+	u, _ := url.Parse(s.URL)
+	hostport := net.JoinHostPort(u.Hostname(), u.Port())
 
 	closed := make(chan struct{})
-
-	go r.Reconnect(closed, url)
+	route := "/foo"
+	go r.Reconnect(closed, hostport, route)
 
 	// first failed connection should be immediate
 	// backoff with jitter means we quite can't be sure what the timings are
@@ -165,7 +167,8 @@ func TestReconnectAfterDisconnect(t *testing.T) {
 	url := "ws" + strings.TrimPrefix(s.URL, "http")
 
 	closed := make(chan struct{})
-	go r.Reconnect(closed, url)
+	route := "/foo"
+	go r.Reconnect(closed, url, route)
 
 	// first failed connection should be immediate
 	// should connect on third try
@@ -210,6 +213,16 @@ func TestReconnectAfterDisconnect(t *testing.T) {
 }
 
 func echo(w http.ResponseWriter, r *http.Request) {
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		log.Printf("Error reading body: %v", err)
+		http.Error(w, "can't read body", http.StatusBadRequest)
+		return
+	}
+	w.Write(body)
+	fmt.Printf("in echo\n")
+	time.Sleep(10 * time.Millisecond)
+
 	/*	reader := bufio.NewReader(c)
 		maxFrameBytes := 1024000 //TODO make configurable
 		glob := make([]byte, maxFrameBytes)
@@ -226,7 +239,6 @@ func echo(w http.ResponseWriter, r *http.Request) {
 				n, err := io.ReadAtLeast(reader, glob, 1)
 				fmt.Printf("got message from readAtLeast %v %v %v\n", n, glob[0:n], err)
 	*/
-	fmt.Printf("in echo\n")
 	/*
 
 		for {

@@ -142,9 +142,9 @@ func (r *ReconTcp) Dial(closed chan struct{}, hostport string, route string) err
 	log.WithField("To", hostport).Info("Connected")
 
 	// now request our route ...
-	req, err := http.NewRequest("GET", "http://whocares/foo", nil)
+	req, err := http.NewRequest("GET", "http://somewhere/foo", nil)
 
-	requestDump, err := httputil.DumpRequest(req, false)
+	requestDump, err := httputil.DumpRequest(req, true)
 	if err != nil {
 		fmt.Println(err)
 	}

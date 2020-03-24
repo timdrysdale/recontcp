@@ -15,10 +15,10 @@ import (
 // The application runs readPump in a per-connection goroutine. The application
 // ensures that there is at most one reader on a connection by executing all
 // reads from this goroutine.
-func (c *Client) readPump(closed chan struct{}) {
+func (r *ReconTcp) readPump(closed chan struct{}) {
 	defer func() {
 		// Ensure that we close the connection:
-		defer c.conn.Close()
+		defer r.Conn.Close() //TODO do we need this?
 	}()
 
 	maxFrameBytes := 1024
@@ -45,9 +45,9 @@ func (c *Client) readPump(closed chan struct{}) {
 			}
 
 			tCh <- 0 //tell the monitoring routine we're alive
-
-			n, err := io.ReadAtLeast(c.conn, glob, 1)
-
+			fmt.Printf("readPump waiting to readAtLeast\n")
+			n, err := io.ReadAtLeast(r.Conn, glob, 1)
+			fmt.Printf("readPump got error %v\n", err)
 			if err == nil {
 
 				frameBuffer.mux.Lock()
@@ -95,7 +95,7 @@ func (c *Client) readPump(closed chan struct{}) {
 			frameBuffer.mux.Unlock()
 
 			if err == nil && n > 0 {
-				c.receive <- message{data: frame}
+				r.In <- TcpMessage{Data: frame}
 			}
 
 		}
@@ -107,19 +107,20 @@ func (c *Client) readPump(closed chan struct{}) {
 // A goroutine running writePump is started for each connection. The
 // application ensures that there is at most one writer to a connection by
 // executing all writes from this goroutine.
-func (c *Client) writePump(closed <-chan struct{}) {
-
+func (r *ReconTcp) writePump(closed <-chan struct{}) {
+	fmt.Printf("in writePump\n")
 	for {
 		select {
-		case message, ok := <-c.send:
-
+		case message, ok := <-r.Out:
+			fmt.Printf("writePump got message to send: %v\n", message)
 			if !ok {
 				return
 			}
 
-			_, err := c.conn.Write(message.data) //size was n
-			c.bufrw.Flush()
+			n, err := r.Conn.Write(message.Data) //size was n
+			fmt.Printf("writepump wrote message %v of size %v\n", message.Data, n)
 			if err != nil {
+				fmt.Printf("writepump error: %v", err)
 				return
 			}
 
